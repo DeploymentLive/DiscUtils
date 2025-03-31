@@ -113,9 +113,11 @@ namespace DiscUtils.Fat
                 _raw[rawIdx++] = SpaceByte;
             }
 
-            if (nameIdx != bytes.Length && !useLongName)
+            if (nameIdx != bytes.Length)
             {
-                throw new ArgumentException("File extension too long '" + name + "'", nameof(name));
+                if (!useLongName)
+                    throw new ArgumentException("File extension too long '" + name + "'", nameof(name));
+                LongName = name;
             }
         }
 
@@ -138,7 +140,7 @@ namespace DiscUtils.Fat
 
         public static FileName FromPath(string path, Encoding encoding)
         {
-            return new FileName(Utilities.GetFileFromPath(path), encoding, false);
+            return new FileName(Utilities.GetFileFromPath(path), encoding, true);
         }
 
         public static bool operator ==(FileName a, FileName b)
