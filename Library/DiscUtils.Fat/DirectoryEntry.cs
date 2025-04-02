@@ -22,8 +22,10 @@
 
 using System;
 using System.IO;
+using System.Runtime.InteropServices.ComTypes;
 using System.Text;
 using DiscUtils.Streams;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace DiscUtils.Fat
 {
@@ -128,9 +130,59 @@ namespace DiscUtils.Fat
 
         public FileName Name { get; set; }
 
+        internal static byte CheckSum(string name )
+        {
+            byte sum = 0;
+            for (int i = 0; i < 11; i++)
+            {
+                sum = (byte) ( (((sum & 1) << 7) | ((sum & 0xfe) >> 1)) + name[i] );
+            }
+            return sum;
+        }
+
+        internal void WriteLongFile(string LongFilename, byte Sequence, Stream stream)
+        {
+            byte[] array = new byte[32];
+
+            if ( LongFilename.Length > 13 )
+            {
+                Console.WriteLine("Write: " + LongFilename.Substring(0, 13));
+                // Palce the long name into the stream, end first. Recursion to the rescue!! 
+                WriteLongFile(LongFilename.Substring(13), Sequence++, stream);
+            }
+            else
+            {
+                Sequence += 0x40;
+            }
+
+            array[0] = Sequence; // attribute byte
+            array[11] = (byte) (FatAttributes.ReadOnly | FatAttributes.Hidden | FatAttributes.System | FatAttributes.VolumeId); 
+            array[12] = 0; // always 0 
+            string ShortName = Name.LongName.Substring(0, 8);
+            if (Name.LongName.IndexOf('.') > 1) { ShortName += Name.LongName.Substring(Name.LongName.IndexOf('.') + 1, 3); }
+            array[13] = CheckSum(ShortName.ToUpperInvariant());
+            // EndianUtilities.WriteBytesLittleEndian(_firstClusterLo, array, 26);
+
+            byte[] NameBuffer = Encoding.Unicode.GetBytes(Name.LongName);
+            //         (Name, Start, Dest, Start, Len)
+            Array.Copy(NameBuffer,  0, array,  1, 10); // First 5 chars
+            Array.Copy(NameBuffer, 10, array, 14, 12); // Second 6 chars
+            Array.Copy(NameBuffer, 22, array, 28,  4); // Third 2 chars
+
+            stream.Write(array, 0, array.Length);
+
+        }
+
         internal void WriteTo(Stream stream)
         {
             byte[] buffer = new byte[32];
+
+            if (!String.IsNullOrEmpty(Name.LongName))
+            {
+                // from https://www.kernel.org/doc/Documentation/filesystems/vfat.txt
+                WriteLongFile(Name.LongName, 1, stream);
+
+            }
 
             Name.GetBytes(buffer, 0);
             buffer[11] = _attr;
